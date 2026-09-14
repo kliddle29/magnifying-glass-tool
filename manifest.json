@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Magnifying Glass",
+  "version": "0.1.0",
+  "description": "Click the toolbar icon, then hover to see any page up close.",
+  "action": {
+    "default_title": "Toggle magnifier"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle",
+      "js": [
+        "src/utils/math.js",
+        "src/input/input.js",
+        "src/canvas/setupCanvas.js",
+        "src/canvas/loop.js",
+        "main.js"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+initInput();
+initLens();
+startLoop();
