@@ -30,3 +30,4 @@ assistance.
 | `src/canvas/loop.js` | Per-frame update: repositions the lens while active |
 | `src/utils/math.js` | Unchanged from the original engine |
 | `index.html` / `style.css` | Project landing page (for GitHub Pages), not the tool itself |
+| `process/prompts.md` | Verbatim log of prompts used to build this project |
