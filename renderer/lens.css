@@ -1,0 +1,25 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+}
+
+.lens-frame {
+  width: 180px;
+  height: 180px;
+  margin: 8px auto 0;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.9), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#lens-canvas {
+  width: 180px;
+  height: 180px;
+  display: block;
+}

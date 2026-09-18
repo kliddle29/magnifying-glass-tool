@@ -1,0 +1,14 @@
+{
+  "name": "magnifying-glass-tool",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A system-wide, always-on-top screen magnifier. Hover anywhere on screen to see a zoomed view of whatever's under the cursor.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.1"
+  }
+}

@@ -1,3 +1,167 @@
-initInput();
-initLens();
-startLoop();
+'use strict';
+
+const path = require('path');
+const {
+  app,
+  BrowserWindow,
+  Tray,
+  screen,
+  desktopCapturer,
+  globalShortcut,
+  session,
+  nativeImage,
+} = require('electron');
+
+const { clamp } = require('./src/utils/math.js');
+
+const LENS_SIZE = 180;
+const WINDOW_WIDTH = LENS_SIZE + 40;
+const WINDOW_HEIGHT = LENS_SIZE + 16;
+const TRACK_INTERVAL_MS = 16;
+const TOGGLE_SHORTCUT = 'CommandOrControl+Shift+M';
+
+function forwardConsole(win, label) {
+  win.webContents.on('console-message', (details) => {
+    console.log(`[${label}:${details.level}] ${details.message}`);
+  });
+}
+
+let lensWindow = null;
+let tray = null;
+let trackTimer = null;
+let active = false;
+
+function createLensWindow() {
+  lensWindow = new BrowserWindow({
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  lensWindow.setAlwaysOnTop(true, 'screen-saver');
+  lensWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  lensWindow.setIgnoreMouseEvents(true, { forward: true });
+  // Excludes this window from desktopCapturer/getDisplayMedia output. Without
+  // this the lens captures itself — a mirror inside the mirror, and the same
+  // "background doesn't hide" failure this tool started from, just moved
+  // from the DOM to the OS compositor.
+  lensWindow.setContentProtection(true);
+
+  lensWindow.loadFile(path.join(__dirname, 'renderer', 'lens.html'));
+  forwardConsole(lensWindow, 'lens');
+}
+
+function setupDisplayMediaHandler() {
+  // A custom handler makes getDisplayMedia() in the renderer resolve
+  // silently with the display under the cursor instead of popping the OS
+  // source picker every time the lens turns on.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      const cursor = screen.getCursorScreenPoint();
+      const display = screen.getDisplayNearestPoint(cursor);
+
+      desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+        const match =
+          sources.find((s) => s.display_id === String(display.id)) ||
+          sources[0];
+        callback({ video: match });
+      });
+    },
+    { useSystemPicker: false }
+  );
+}
+
+function startTracking() {
+  if (trackTimer) return;
+  trackTimer = setInterval(() => {
+    if (!lensWindow || lensWindow.isDestroyed()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+
+    const x = clamp(
+      Math.round(cursor.x - WINDOW_WIDTH / 2),
+      display.bounds.x,
+      display.bounds.x + display.bounds.width - WINDOW_WIDTH
+    );
+    const y = clamp(
+      Math.round(cursor.y - LENS_SIZE / 2),
+      display.bounds.y,
+      display.bounds.y + display.bounds.height - WINDOW_HEIGHT
+    );
+    lensWindow.setPosition(x, y);
+
+    lensWindow.webContents.send('cursor-update', {
+      cursor,
+      display: { bounds: display.bounds, scaleFactor: display.scaleFactor },
+    });
+  }, TRACK_INTERVAL_MS);
+}
+
+function stopTracking() {
+  if (trackTimer) {
+    clearInterval(trackTimer);
+    trackTimer = null;
+  }
+}
+
+function setActive(next) {
+  if (active === next) return;
+  active = next;
+
+  if (active) {
+    lensWindow.show();
+    startTracking();
+  } else {
+    stopTracking();
+    lensWindow.hide();
+  }
+  lensWindow.webContents.send('magnifier-active', active);
+  if (tray) tray.setTitle(active ? '•' : '');
+}
+
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
+  icon.setTemplateImage(true);
+  tray = new Tray(icon);
+  tray.setToolTip(`Magnifier — click or ${TOGGLE_SHORTCUT.replace('CommandOrControl', '⌘')} to toggle`);
+  tray.on('click', () => setActive(!active));
+}
+
+function registerShortcuts() {
+  const toggleOk = globalShortcut.register(TOGGLE_SHORTCUT, () => setActive(!active));
+  if (!toggleOk) {
+    console.warn(`Could not register ${TOGGLE_SHORTCUT} — another app is probably using it.`);
+  }
+}
+
+app.whenReady().then(() => {
+  if (process.platform === 'darwin') app.dock.hide();
+  setupDisplayMediaHandler();
+  createLensWindow();
+  createTray();
+  registerShortcuts();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  stopTracking();
+});
+
+app.on('window-all-closed', (event) => {
+  // Menu-bar utility, not a document-window app — don't quit when the
+  // (hidden, click-through) lens window closes.
+  event.preventDefault();
+});
