@@ -4,12 +4,25 @@ const ZOOM = 3;
 const video = document.getElementById('feed');
 const canvas = document.getElementById('lens-canvas');
 const ctx = canvas.getContext('2d');
+const frame = document.getElementById('lens-frame');
+const status = document.getElementById('status');
 
 canvas.width = LENS_SIZE;
 canvas.height = LENS_SIZE;
 
 let latest = null; // { cursor, display } from main's cursor-update
 let streamReady = false;
+
+function showNotSensing(message) {
+  status.textContent = message;
+  status.classList.add('visible');
+  frame.classList.add('not-sensing');
+}
+
+function clearNotSensing() {
+  status.classList.remove('visible');
+  frame.classList.remove('not-sensing');
+}
 
 async function startCapture() {
   try {
@@ -20,7 +33,17 @@ async function startCapture() {
     video.srcObject = stream;
     await video.play();
     streamReady = true;
+    clearNotSensing();
+    // The stream can still die later (permission revoked, display
+    // disconnected) -- without this the lens would just freeze on its
+    // last frame instead of admitting it stopped working.
+    stream.getVideoTracks()[0].addEventListener('ended', () => {
+      streamReady = false;
+      showNotSensing('Screen sharing stopped');
+    });
   } catch (err) {
+    streamReady = false;
+    showNotSensing('Screen Recording permission needed');
     console.error('Screen capture failed:', err.message);
   }
 }

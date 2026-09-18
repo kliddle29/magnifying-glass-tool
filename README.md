@@ -62,6 +62,31 @@ the lens window from any screen capture, including its own.
 | `renderer/lens.js` | Captures the screen, crops/scales the region under the cursor onto the lens canvas each frame |
 | `src/utils/math.js` | `clamp`/`lerp`/`mapRange` — shared by the main-process cursor clamping and the renderer's crop math |
 
+## Back-end architecture
+
+- **What data does this tool need?** The cursor's screen position (polled ~60 times a second) and a live video feed of whichever display it's on.
+- **Where is it stored?** Nowhere. Both live in memory only for as long as the lens is active.
+- **Temporary or persistent?** Fully temporary — nothing survives a toggle-off, let alone an app restart.
+- **Does it need memory between sessions?** No.
+- **Does it require AI inference?** No — ruled out explicitly in `docs/TOOL_INTENT_STATEMENT.md`'s Refusal Clause.
+- **How many API calls are realistically required?** Zero network calls. The only capture API involved is macOS's own screen-recording API (`getDisplayMedia`), called once per toggle-on.
+- **What happens if it fails?** The lens switches to a visibly distinct state (red ring, plain-language reason) instead of freezing or going blank — see `renderer/lens.js`'s `showNotSensing()`. The same state covers a mid-use failure (permission revoked, display disconnected), not just startup failure.
+
+### Layers
+
+| Layer | Where | What it does |
+|---|---|---|
+| Input | `main.js` `startTracking()` | Polls cursor position and the toggle trigger (tray click / ⌘⇧M) |
+| Logic | `main.js` + `renderer/lens.js` | Clamps window position to the display bounds; maps the cursor into the captured video's pixel space and computes the crop region |
+| Output | `renderer/lens.js` `draw()` | Repaints the cropped, scaled region onto the canvas every frame; falls back to the not-sensing state on capture failure |
+
+### Behavior integrity check
+
+- **Does it interrupt where claimed?** It doesn't interrupt at all — correctly, since the Tool Intent Statement never claimed an interruption point. No craving, no choice point to build.
+- **Does it avoid shame, surveillance, or manipulation?** Nothing leaves the device, nothing is logged, and the only judgment call in the whole flow is telling you plainly whether it's currently working.
+- **Friction: exploited or intentional?** None exists anywhere in this build, matching the Instrument Panel direction picked over Speed Bump in the Interface Ritual Sketch.
+- **Minimal, or feature-stacking?** Still minimal — this build only added the failure-state indicator, which was already named as a gap in the Signature Interaction sketch, not a new feature bolted on.
+
 ## Known limitations
 
 - Built and tested for macOS only.

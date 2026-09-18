@@ -10,6 +10,7 @@ html, body {
 }
 
 .lens-frame {
+  position: relative;
   width: 180px;
   height: 180px;
   margin: 8px auto 0;
@@ -18,8 +19,33 @@ html, body {
   box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.9), 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* Not-sensing state: a visibly different ring, not just a blank lens —
+   a dead lens and an off lens should never look the same. */
+.lens-frame.not-sensing {
+  box-shadow: 0 0 0 2px rgba(196, 90, 90, 0.9), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
 #lens-canvas {
   width: 180px;
   height: 180px;
   display: block;
+}
+
+#status {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #c45a5a;
+  background: rgba(20, 10, 10, 0.85);
+}
+
+#status.visible {
+  display: flex;
 }
