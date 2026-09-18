@@ -12,7 +12,7 @@ awareness + dignity, and why? (4–6 sentences)
 > isn't what this tool is for. Needing your eyes helped isn't a craving
 > to interrupt or a wound that needs gentle handling, it's just a fact,
 > so the interface should treat it like one instead of narrating it.
-> Instrument Panel doesn't ask anything of you before it works and
-> doesn't cushion the fact that you used it afterward. That's what the
+> You don't have to do anything before it works, and it doesn't cushion
+> the fact that you used it afterward either. That's what the
 > Refusal Clause already said; this direction just puts it on the
 > screen instead of only in the docs.
