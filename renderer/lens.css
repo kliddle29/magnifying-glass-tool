@@ -9,6 +9,20 @@ html, body {
   overflow: hidden;
 }
 
+/* The only animation in the whole tool: a 150ms fade tied to the toggle
+   itself, not a decorative flourish. Long enough to read as deliberate,
+   short enough to never feel like it's making you wait. Deliberately
+   NOT applied to the not-sensing state below -- an error should land
+   immediately, not ease in. */
+body {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+body.active {
+  opacity: 1;
+}
+
 .lens-frame {
   position: relative;
   width: 180px;
@@ -16,13 +30,29 @@ html, body {
   margin: 8px auto 0;
   border-radius: 50%;
   overflow: hidden;
-  box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.9), 0 8px 24px rgba(0, 0, 0, 0.5);
+  /* Glass depth: a soft drop shadow (floating), a crisp bright rim (light
+     catching a polished edge), and a faint inset shadow just inside it
+     (the glass has visible thickness, it isn't a flat painted disc). */
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.85),
+    inset 0 0 14px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Not-sensing state: a visibly different ring, not just a blank lens —
-   a dead lens and an off lens should never look the same. */
+   a dead lens and an off lens should never look the same. The glass
+   gloss/edge effects switch off here too; an error isn't the moment
+   for a pretty highlight. */
 .lens-frame.not-sensing {
-  box-shadow: 0 0 0 2px rgba(196, 90, 90, 0.9), 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(196, 90, 90, 0.9),
+    inset 0 0 14px 3px rgba(0, 0, 0, 0.3);
+}
+
+.lens-frame.not-sensing .lens-gloss,
+.lens-frame.not-sensing .lens-edge {
+  opacity: 0;
 }
 
 #lens-canvas {
@@ -31,21 +61,82 @@ html, body {
   display: block;
 }
 
+/* Specular highlight: light glancing off curved glass, top-left. Screen
+   blend mode only ever brightens what's under it, never tints or dims,
+   so the magnified content underneath stays fully legible. */
+.lens-gloss {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 22%,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.2) 16%,
+    rgba(255, 255, 255, 0) 40%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+/* Edge refraction: a thin ring of color right at the boundary only, the
+   "light curves at the edges" cue. mask-composite: exclude keeps this
+   confined to the 3px rim -- the interior, where the actual
+   magnification lives, is never touched, so it stays perfectly clear.
+   One accent color (the app's existing teal), not a rainbow: Instrument
+   Panel's whole case in the reflection was restraint, and a multi-hue
+   ring reads as decoration in a way a single accent doesn't. */
+.lens-edge {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  padding: 3px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(100, 255, 218, 0.15),
+    rgba(100, 255, 218, 0.65),
+    rgba(100, 255, 218, 0.15),
+    rgba(100, 255, 218, 0.65),
+    rgba(100, 255, 218, 0.15)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: blur(1.5px);
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
 #status {
   position: absolute;
   inset: 0;
   display: none;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 18px;
+  padding: 20px;
+  gap: 6px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #c45a5a;
-  background: rgba(20, 10, 10, 0.85);
+  background: #180d0d;
 }
 
 #status.visible {
   display: flex;
+}
+
+/* Two-tier hierarchy: state the fact plainly, then guide -- text that
+   only confronts and never helps isn't calm, it's just quiet shouting. */
+#status-headline {
+  font-size: 12px;
+  font-weight: 600;
+  color: #d98888;
+  line-height: 1.35;
+}
+
+#status-guide {
+  font-size: 10px;
+  color: #8a6a6a;
+  line-height: 1.4;
 }

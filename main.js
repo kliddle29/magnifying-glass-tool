@@ -19,6 +19,10 @@ const WINDOW_WIDTH = LENS_SIZE + 40;
 const WINDOW_HEIGHT = LENS_SIZE + 16;
 const TRACK_INTERVAL_MS = 16;
 const TOGGLE_SHORTCUT = 'CommandOrControl+Shift+M';
+// Matches the CSS fade duration in lens.css -- the window waits for the
+// fade-out to finish playing before it actually disappears, instead of
+// cutting the animation off mid-flight.
+const FADE_MS = 150;
 
 function forwardConsole(win, label) {
   win.webContents.on('console-message', (details) => {
@@ -124,11 +128,17 @@ function setActive(next) {
   if (active) {
     lensWindow.show();
     startTracking();
+    lensWindow.webContents.send('magnifier-active', true);
   } else {
     stopTracking();
-    lensWindow.hide();
+    lensWindow.webContents.send('magnifier-active', false);
+    // Give the renderer's fade-out time to actually play before the
+    // window disappears -- hiding it immediately would cut the
+    // animation off on frame one and defeat the point of having it.
+    setTimeout(() => {
+      if (!active) lensWindow.hide();
+    }, FADE_MS);
   }
-  lensWindow.webContents.send('magnifier-active', active);
   if (tray) tray.setTitle(active ? '•' : '');
 }
 

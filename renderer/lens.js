@@ -6,6 +6,8 @@ const canvas = document.getElementById('lens-canvas');
 const ctx = canvas.getContext('2d');
 const frame = document.getElementById('lens-frame');
 const status = document.getElementById('status');
+const statusHeadline = document.getElementById('status-headline');
+const statusGuide = document.getElementById('status-guide');
 
 canvas.width = LENS_SIZE;
 canvas.height = LENS_SIZE;
@@ -13,8 +15,9 @@ canvas.height = LENS_SIZE;
 let latest = null; // { cursor, display } from main's cursor-update
 let streamReady = false;
 
-function showNotSensing(message) {
-  status.textContent = message;
+function showNotSensing(headline, guide) {
+  statusHeadline.textContent = headline;
+  statusGuide.textContent = guide || '';
   status.classList.add('visible');
   frame.classList.add('not-sensing');
 }
@@ -39,11 +42,14 @@ async function startCapture() {
     // last frame instead of admitting it stopped working.
     stream.getVideoTracks()[0].addEventListener('ended', () => {
       streamReady = false;
-      showNotSensing('Screen sharing stopped');
+      showNotSensing('Screen sharing stopped', 'Toggle off and on to reconnect.');
     });
   } catch (err) {
     streamReady = false;
-    showNotSensing('Screen Recording permission needed');
+    showNotSensing(
+      'Screen Recording permission needed',
+      'Grant it in System Settings → Privacy & Security, then reopen the app.'
+    );
     console.error('Screen capture failed:', err.message);
   }
 }
@@ -74,6 +80,7 @@ window.magnifier.onCursorUpdate((data) => {
 });
 
 window.magnifier.onActiveChange((isActive) => {
+  document.body.classList.toggle('active', isActive);
   if (isActive && !streamReady) startCapture();
 });
 
