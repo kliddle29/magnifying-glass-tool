@@ -10,6 +10,7 @@ const {
   globalShortcut,
   session,
   nativeImage,
+  powerMonitor,
 } = require('electron');
 
 const { clamp } = require('./src/utils/math.js');
@@ -150,6 +151,19 @@ function createTray() {
   tray.on('click', () => setActive(!active));
 }
 
+function registerPowerEvents() {
+  // A getDisplayMedia() stream doesn't reliably signal its own death across
+  // system sleep -- the video track can just freeze on its last frame
+  // instead of firing 'ended'. powerMonitor's 'resume' is the OS telling us
+  // directly the machine just woke up, which is a real signal instead of a
+  // guess about media-track event behavior across sleep.
+  powerMonitor.on('resume', () => {
+    if (lensWindow && !lensWindow.isDestroyed()) {
+      lensWindow.webContents.send('system-resumed');
+    }
+  });
+}
+
 function registerShortcuts() {
   const toggleOk = globalShortcut.register(TOGGLE_SHORTCUT, () => setActive(!active));
   if (!toggleOk) {
@@ -163,6 +177,7 @@ app.whenReady().then(() => {
   createLensWindow();
   createTray();
   registerShortcuts();
+  registerPowerEvents();
 });
 
 app.on('will-quit', () => {

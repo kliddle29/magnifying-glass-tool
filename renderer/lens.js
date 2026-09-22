@@ -122,4 +122,10 @@ window.magnifier.onActiveChange((isActive) => {
   if (isActive && !streamReady) startCapture();
 });
 
+window.magnifier.onSystemResumed(() => {
+  // getDisplayMedia() streams don't reliably signal their own death across
+  // system sleep, so on wake we don't wait to find out -- just reacquire.
+  if (document.body.classList.contains('active')) startCapture();
+});
+
 requestAnimationFrame(draw);
