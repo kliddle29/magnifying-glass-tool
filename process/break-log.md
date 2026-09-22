@@ -8,7 +8,7 @@ what changed.
 
 ### 1. 2026-09-22 — macOS Accessibility Zoom causes double magnification
 
-**Commit:** (filled in below, after this commit exists)
+**Commit:** `67e1c77`
 
 **What broke:** Turning on macOS's built-in Accessibility Zoom
 (System Settings → Accessibility → Zoom) while the lens is active
