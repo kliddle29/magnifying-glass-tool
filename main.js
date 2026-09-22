@@ -109,7 +109,7 @@ function startTracking() {
 
     lensWindow.webContents.send('cursor-update', {
       cursor,
-      display: { bounds: display.bounds, scaleFactor: display.scaleFactor },
+      display: { id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor },
     });
   }, TRACK_INTERVAL_MS);
 }

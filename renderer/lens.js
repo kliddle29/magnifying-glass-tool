@@ -12,8 +12,11 @@ const statusGuide = document.getElementById('status-guide');
 canvas.width = LENS_SIZE;
 canvas.height = LENS_SIZE;
 
-let latest = null; // { cursor, display } from main's cursor-update
+let latest = null; // { cursor, display: { id, bounds, scaleFactor } } from main's cursor-update
 let streamReady = false;
+let capturing = false;
+let currentStream = null;
+let capturedDisplayId = null; // which display the *current* video stream was captured for
 
 function showNotSensing(headline, guide) {
   statusHeadline.textContent = headline;
@@ -27,15 +30,33 @@ function clearNotSensing() {
   frame.classList.remove('not-sensing');
 }
 
+function stopCurrentStream() {
+  if (currentStream) {
+    currentStream.getTracks().forEach((track) => track.stop());
+    currentStream = null;
+  }
+  streamReady = false;
+}
+
 async function startCapture() {
+  // Guards against overlapping calls -- both a display change and a
+  // system-resume event could fire close together and both try to
+  // reacquire at once.
+  if (capturing) return;
+  capturing = true;
+  stopCurrentStream();
+  const targetDisplayId = latest ? latest.display.id : null;
+
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 30 },
       audio: false,
     });
+    currentStream = stream;
     video.srcObject = stream;
     await video.play();
     streamReady = true;
+    capturedDisplayId = targetDisplayId;
     clearNotSensing();
     // The stream can still die later (permission revoked, display
     // disconnected) -- without this the lens would just freeze on its
@@ -51,6 +72,8 @@ async function startCapture() {
       'Grant it in System Settings → Privacy & Security, then reopen the app.'
     );
     console.error('Screen capture failed:', err.message);
+  } finally {
+    capturing = false;
   }
 }
 
@@ -77,6 +100,21 @@ function draw() {
 
 window.magnifier.onCursorUpdate((data) => {
   latest = data;
+  const isActive = document.body.classList.contains('active');
+  // The video stream is tied to whichever display was captured at
+  // toggle-on time. If the cursor has moved to a different display,
+  // the crop math below would keep computing coordinates in the new
+  // display's space against video content from the old one -- that
+  // mismatch is what caused the clipping. Reacquire for the display
+  // the cursor is actually on now.
+  if (
+    isActive &&
+    streamReady &&
+    !capturing &&
+    data.display.id !== capturedDisplayId
+  ) {
+    startCapture();
+  }
 });
 
 window.magnifier.onActiveChange((isActive) => {
