@@ -96,3 +96,12 @@ the lens window from any screen capture, including its own.
   lens off and back on.
 - Can't magnify DRM-protected video (blacked out by the OS in any screen
   capture) or the contents of other screen-recording-protected windows.
+- Breaks if macOS's own Accessibility Zoom is active at the same time
+  (double magnification — see `process/break-log.md`). Not fixable from
+  inside this app: Accessibility Zoom magnifies the whole composited
+  screen, including this app's own lens window, and there's no API for
+  a regular app to exclude itself from it.
+
+## Break log
+
+See `process/break-log.md`.
