@@ -49,6 +49,9 @@ function createLensWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
+    // Without this, Mission Control's window-sweep (including the "Show
+    // Desktop" gesture) sweeps this window away with everything else.
+    hiddenInMissionControl: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -127,6 +130,12 @@ function setActive(next) {
   active = next;
 
   if (active) {
+    // Re-assert on every activation, not just once at window creation --
+    // best-effort against macOS sometimes dropping these flags around
+    // full-screen Space changes. Not confirmed to fully fix it; see
+    // process/break-log.md.
+    lensWindow.setAlwaysOnTop(true, 'screen-saver');
+    lensWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     lensWindow.show();
     startTracking();
     lensWindow.webContents.send('magnifier-active', true);
