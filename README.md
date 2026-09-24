@@ -90,10 +90,14 @@ the lens window from any screen capture, including its own.
 ## Known limitations
 
 - Built and tested for macOS only.
-- Single monitor at a time: the screen capture is acquired for whichever
-  display the cursor is on when the lens turns on. Dragging the lens to a
-  *different* monitor won't re-acquire the capture until you toggle the
-  lens off and back on.
+- Multi-monitor: the lens reacquires its capture automatically when the
+  cursor crosses onto a different display (see `process/break-log.md`
+  entry 2). Verified in code by simulating a display change; not yet
+  confirmed on real multi-monitor hardware.
+- Full-screen apps and the Mission Control / Show Desktop gesture have
+  caused the lens to disappear. A mitigation is in place
+  (`hiddenInMissionControl: false`, re-asserting `alwaysOnTop` on every
+  activation) but is not yet confirmed to fully resolve either case.
 - Can't magnify DRM-protected video (blacked out by the OS in any screen
   capture) or the contents of other screen-recording-protected windows.
 - Breaks if macOS's own Accessibility Zoom is active at the same time
