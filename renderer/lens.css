@@ -51,7 +51,8 @@ body.active {
 }
 
 .lens-frame.not-sensing .lens-gloss,
-.lens-frame.not-sensing .lens-edge {
+.lens-frame.not-sensing .lens-edge,
+.lens-frame.not-sensing .lens-vignette {
   opacity: 0;
 }
 
@@ -59,6 +60,25 @@ body.active {
   width: 180px;
   height: 180px;
   display: block;
+}
+
+/* Inner vignette: a soft darkening right inside the rim. Without it the
+   sharp zoomed content cuts off hard against the boundary, and the eye
+   reads that hard line before it reads what's actually magnified. A
+   gentle falloff keeps attention centered on the content instead of the
+   edge -- the same reason a real loupe's field of view softens at the
+   boundary instead of stopping abruptly. */
+.lens-vignette {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.38) 100%
+  );
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
 /* Specular highlight: light glancing off curved glass, top-left. Screen
