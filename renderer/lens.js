@@ -96,49 +96,43 @@ function draw() {
 
   ctx.clearRect(0, 0, LENS_SIZE, LENS_SIZE);
   ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
-  eraseCursorArtifact(sx, sy, cropSize, videoX, videoY, scale);
+  blurCursorArea(sx, sy, cropSize, videoX, videoY, scale);
 }
 
 // Chromium's screen capture always burns the real system cursor into the
 // captured frame, and there's no constraint or Electron API that turns it
 // off (a known, still-open limitation -- crbug.com/1007177, unfixed since
-// 2019). Since the crop is always centered on the cursor's own hotspot,
-// its position in the frame is known exactly, so this papers over the
-// glyph by stamping in a same-size patch sampled from just beside it
-// instead.
+// 2019).
 //
-// The patch is centered on the hotspot, not anchored to it -- an earlier
-// version anchored the patch's top-left corner to the hotspot, which
-// covered a real arrow cursor's own down-right extent well enough sitting
-// still, but gave zero margin in every other direction. That mattered
-// because the captured video frame lags slightly behind the cursor
-// position this reads (getDisplayMedia has real capture latency,
-// independent of anything this app controls), so while the cursor is
-// actually moving -- the normal case, since that's when you're looking
-// at something -- the frame's baked-in cursor can sit a real distance
-// from where this code thinks it is. A centered, more generous patch
-// gives margin in every direction against both that lag and larger
-// cursor sizes (macOS's own pointer-size accessibility setting), at the
-// cost of a bit more of the center being resampled instead of genuine
-// detail. Still a heuristic, not a guarantee, on a fast enough swipe.
-function eraseCursorArtifact(sx, sy, cropSize, videoX, videoY, scale) {
+// This used to paste a patch of pixels sampled from elsewhere in the
+// frame over the cursor's guessed position. That was a real mistake:
+// getDisplayMedia's capture latency means the guessed position is only
+// ever approximate while the cursor is moving, and pasting in *different*
+// content at a wrong guess doesn't just fail to hide the real cursor --
+// it adds a second, visibly wrong patch of its own, which is worse than
+// the original problem (confirmed after shipping it: two glitching
+// fragments instead of one visible cursor).
+//
+// Blurring instead of replacing fixes that failure mode by construction.
+// This redraws the exact same source pixels, not different ones, through
+// a blur filter, clipped to a generous area around the guessed cursor
+// position. A wrong guess just blurs an empty patch of harmless content;
+// only a correct-or-close guess needs to soften the actual cursor. Either
+// way there's nothing foreign pasted in to look out of place.
+function blurCursorArea(sx, sy, cropSize, videoX, videoY, scale) {
   const destScale = LENS_SIZE / cropSize;
-  const patchPts = 32;
-  const patchPx = patchPts * scale;
-  const half = patchPx / 2;
+  const radiusPts = 26; // generous: margin against capture-latency drift
+  const destRadius = radiusPts * scale * destScale;
+  const destX = (videoX - sx) * destScale;
+  const destY = (videoY - sy) * destScale;
 
-  // Sample a same-size, cursor-free patch from a full patch-width to the
-  // side, so it can't overlap the area about to be erased.
-  let srcX = videoX - patchPx;
-  if (srcX < 0 || srcX + patchPx > video.videoWidth) srcX = videoX + patchPx;
-  if (srcX < 0 || srcX + patchPx > video.videoWidth) return; // no room either side
-  const srcY = clamp(videoY - half, 0, video.videoHeight - patchPx);
-
-  const destX = (videoX - half - sx) * destScale;
-  const destY = (videoY - half - sy) * destScale;
-  const destSize = patchPx * destScale;
-
-  ctx.drawImage(video, srcX, srcY, patchPx, patchPx, destX, destY, destSize, destSize);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(destX, destY, destRadius, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.filter = 'blur(5px)';
+  ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
+  ctx.restore();
 }
 
 window.magnifier.onCursorUpdate((data) => {

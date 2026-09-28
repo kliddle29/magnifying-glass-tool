@@ -115,17 +115,19 @@ the lens window from any screen capture, including its own.
   inside this app: Accessibility Zoom magnifies the whole composited
   screen, including this app's own lens window, and there's no API for
   a regular app to exclude itself from it.
-- The system cursor gets papered over inside the lens with a same-size
-  patch sampled from just beside it (see `eraseCursorArtifact()` in
-  `renderer/lens.js`), since there's no OS or Electron option to exclude
-  the cursor from the capture itself (a known, still-open Chromium
-  limitation). This is a heuristic, not a guarantee: `getDisplayMedia()`
-  has real capture latency independent of anything this app controls, so
-  while the cursor is actively moving, the frame's baked-in cursor can
-  sit some real distance from where the patch gets drawn. Reliable when
-  the cursor is still or moving slowly; may still flash briefly visible
-  on a fast swipe. An unusually large custom cursor may not be fully
-  covered either way.
+- The system cursor gets blurred out inside the lens (see
+  `blurCursorArea()` in `renderer/lens.js`), since there's no OS or
+  Electron option to exclude the cursor from the capture itself (a
+  known, still-open Chromium limitation). An earlier version tried to
+  paste a same-size patch of nearby pixels over the cursor instead;
+  that was a real mistake, since `getDisplayMedia()` has capture
+  latency independent of anything this app controls, and a wrong guess
+  at the cursor's position didn't just fail to hide it, it pasted in a
+  second, visibly wrong patch of its own. Blurring the same source
+  pixels in place instead of replacing them fixes that failure mode by
+  construction: a wrong guess just blurs harmless nearby content. Still
+  a heuristic, not a guarantee, on a fast enough swipe. An unusually
+  large custom cursor may not be fully covered either way.
 - Region recording only covers a single display: the selection window
   opens on whichever display the cursor is on when you start, and a
   drag can't span onto a second monitor.
