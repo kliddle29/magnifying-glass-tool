@@ -119,8 +119,13 @@ the lens window from any screen capture, including its own.
   patch sampled from just beside it (see `eraseCursorArtifact()` in
   `renderer/lens.js`), since there's no OS or Electron option to exclude
   the cursor from the capture itself (a known, still-open Chromium
-  limitation). Covers the standard arrow; an unusually large custom
-  cursor may not be fully covered.
+  limitation). This is a heuristic, not a guarantee: `getDisplayMedia()`
+  has real capture latency independent of anything this app controls, so
+  while the cursor is actively moving, the frame's baked-in cursor can
+  sit some real distance from where the patch gets drawn. Reliable when
+  the cursor is still or moving slowly; may still flash briefly visible
+  on a fast swipe. An unusually large custom cursor may not be fully
+  covered either way.
 - Region recording only covers a single display: the selection window
   opens on whichever display the cursor is on when you start, and a
   drag can't span onto a second monitor.

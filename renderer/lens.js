@@ -105,24 +105,37 @@ function draw() {
 // 2019). Since the crop is always centered on the cursor's own hotspot,
 // its position in the frame is known exactly, so this papers over the
 // glyph by stamping in a same-size patch sampled from just beside it
-// instead. Not pixel-perfect for unusually large custom cursors, but
-// covers the standard arrow.
+// instead.
+//
+// The patch is centered on the hotspot, not anchored to it -- an earlier
+// version anchored the patch's top-left corner to the hotspot, which
+// covered a real arrow cursor's own down-right extent well enough sitting
+// still, but gave zero margin in every other direction. That mattered
+// because the captured video frame lags slightly behind the cursor
+// position this reads (getDisplayMedia has real capture latency,
+// independent of anything this app controls), so while the cursor is
+// actually moving -- the normal case, since that's when you're looking
+// at something -- the frame's baked-in cursor can sit a real distance
+// from where this code thinks it is. A centered, more generous patch
+// gives margin in every direction against both that lag and larger
+// cursor sizes (macOS's own pointer-size accessibility setting), at the
+// cost of a bit more of the center being resampled instead of genuine
+// detail. Still a heuristic, not a guarantee, on a fast enough swipe.
 function eraseCursorArtifact(sx, sy, cropSize, videoX, videoY, scale) {
   const destScale = LENS_SIZE / cropSize;
-  const patchPts = 20; // covers the standard macOS arrow's glyph extent
+  const patchPts = 32;
   const patchPx = patchPts * scale;
+  const half = patchPx / 2;
 
+  // Sample a same-size, cursor-free patch from a full patch-width to the
+  // side, so it can't overlap the area about to be erased.
   let srcX = videoX - patchPx;
   if (srcX < 0 || srcX + patchPx > video.videoWidth) srcX = videoX + patchPx;
   if (srcX < 0 || srcX + patchPx > video.videoWidth) return; // no room either side
+  const srcY = clamp(videoY - half, 0, video.videoHeight - patchPx);
 
-  const srcY = clamp(videoY, 0, video.videoHeight - patchPx);
-  // destY is derived from the cursor's real position, not the (possibly
-  // clamped) sample position -- otherwise the patch can land somewhere
-  // other than where the cursor actually is once clamping kicks in near
-  // a vertical screen edge.
-  const destX = (videoX - sx) * destScale;
-  const destY = (videoY - sy) * destScale;
+  const destX = (videoX - half - sx) * destScale;
+  const destY = (videoY - half - sy) * destScale;
   const destSize = patchPx * destScale;
 
   ctx.drawImage(video, srcX, srcY, patchPx, patchPx, destX, destY, destSize, destSize);
