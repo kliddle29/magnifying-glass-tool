@@ -18,6 +18,17 @@ let capturing = false;
 let currentStream = null;
 let capturedDisplayId = null; // which display the *current* video stream was captured for
 
+// shouldRecord mirrors the toggle (true from activation to deactivation),
+// independent of any one capture stream. currentStream gets torn down and
+// re-acquired mid-session (multi-monitor moves, sleep/wake); MediaRecorder
+// doesn't survive that (confirmed by testing -- swapping or stopping the
+// underlying track auto-stops it instead of continuing), so a reacquisition
+// while recording ends the current file and starts a new one on the fresh
+// stream rather than silently losing what was captured.
+let shouldRecord = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+
 function showNotSensing(headline, guide) {
   statusHeadline.textContent = headline;
   statusGuide.textContent = guide || '';
@@ -58,6 +69,11 @@ async function startCapture() {
     streamReady = true;
     capturedDisplayId = targetDisplayId;
     clearNotSensing();
+    // stopCurrentStream() above already ended any recorder tied to the
+    // previous stream (stopping its track auto-stops MediaRecorder), so a
+    // reacquisition needs a fresh recorder on the new stream if we're
+    // supposed to still be recording.
+    if (shouldRecord) startRecording(stream);
     // The stream can still die later (permission revoked, display
     // disconnected) -- without this the lens would just freeze on its
     // last frame instead of admitting it stopped working.
@@ -74,6 +90,61 @@ async function startCapture() {
     console.error('Screen capture failed:', err.message);
   } finally {
     capturing = false;
+  }
+}
+
+function pickRecordingMimeType() {
+  const candidates = [
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
+}
+
+function startRecording(stream) {
+  if (mediaRecorder || !stream) return;
+  recordedChunks = [];
+  const mimeType = pickRecordingMimeType();
+  try {
+    mediaRecorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined
+    );
+  } catch (err) {
+    console.error('Could not start recording:', err.message);
+    mediaRecorder = null;
+    return;
+  }
+  mediaRecorder.addEventListener('dataavailable', (e) => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  });
+  mediaRecorder.addEventListener('stop', async () => {
+    const type = mediaRecorder.mimeType || 'video/webm';
+    const blob = new Blob(recordedChunks, { type });
+    recordedChunks = [];
+    mediaRecorder = null;
+    if (blob.size === 0) return;
+    const extension = type.includes('mp4') ? 'mp4' : 'webm';
+    const buffer = await blob.arrayBuffer();
+    try {
+      const savedPath = await window.magnifier.saveRecording(buffer, extension);
+      console.log('Recording saved to', savedPath);
+    } catch (err) {
+      console.error('Could not save recording:', err.message);
+    }
+  });
+  mediaRecorder.start();
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
   }
 }
 
@@ -149,7 +220,16 @@ window.magnifier.onCursorUpdate((data) => {
 
 window.magnifier.onActiveChange((isActive) => {
   document.body.classList.toggle('active', isActive);
-  if (isActive && !streamReady) startCapture();
+  shouldRecord = isActive;
+  if (isActive) {
+    if (!streamReady) {
+      startCapture();
+    } else if (!mediaRecorder) {
+      startRecording(currentStream);
+    }
+  } else {
+    stopRecording();
+  }
 });
 
 window.magnifier.onSystemResumed(() => {

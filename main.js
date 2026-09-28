@@ -1,6 +1,8 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const {
   app,
   BrowserWindow,
@@ -11,6 +13,7 @@ const {
   session,
   nativeImage,
   powerMonitor,
+  ipcMain,
 } = require('electron');
 
 const { clamp } = require('./src/utils/math.js');
@@ -173,6 +176,22 @@ function registerPowerEvents() {
   });
 }
 
+function registerRecordingHandler() {
+  // The renderer can't write files directly under contextIsolation, so it
+  // hands the recorded bytes over here to actually save them.
+  ipcMain.handle('save-recording', (event, arrayBuffer, extension) => {
+    const buffer = Buffer.from(arrayBuffer);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath = path.join(
+      os.homedir(),
+      'Desktop',
+      `Magnifier Recording ${stamp}.${extension}`
+    );
+    fs.writeFileSync(filePath, buffer);
+    return filePath;
+  });
+}
+
 function registerShortcuts() {
   const toggleOk = globalShortcut.register(TOGGLE_SHORTCUT, () => setActive(!active));
   if (!toggleOk) {
@@ -187,6 +206,7 @@ app.whenReady().then(() => {
   createTray();
   registerShortcuts();
   registerPowerEvents();
+  registerRecordingHandler();
 });
 
 app.on('will-quit', () => {

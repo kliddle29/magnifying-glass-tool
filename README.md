@@ -32,7 +32,10 @@ freshly-granted Screen Recording permission after the app restarts.
 ## Use
 
 - **Click the 🔍 in the menu bar**, or press **⌘⇧M**, to toggle the lens
-  on/off.
+  on/off. One toggle now does both: the lens shows a live 3x zoomed view,
+  and the same session is recorded to a video file on your Desktop from
+  activation to deactivation — no separate screen recorder to run
+  alongside it.
 - Hover anywhere on screen — the lens follows the cursor and shows a 3x
   zoomed view.
 
@@ -59,14 +62,14 @@ the lens window from any screen capture, including its own.
 |---|---|
 | `main.js` | Electron main process: creates the lens window, tracks the global cursor, owns the tray icon and toggle hotkey |
 | `preload.js` | Exposes a narrow IPC bridge (`window.magnifier`) to the renderer under context isolation |
-| `renderer/lens.js` | Captures the screen, crops/scales the region under the cursor onto the lens canvas each frame |
+| `renderer/lens.js` | Captures the screen, crops/scales the region under the cursor onto the lens canvas each frame, and records the same capture with `MediaRecorder` for the duration of the session |
 | `src/utils/math.js` | `clamp`/`lerp`/`mapRange` — shared by the main-process cursor clamping and the renderer's crop math |
 
 ## Back-end architecture
 
 - **What data does this tool need?** The cursor's screen position (polled ~60 times a second) and a live video feed of whichever display it's on.
-- **Where is it stored?** Nowhere. Both live in memory only for as long as the lens is active.
-- **Temporary or persistent?** Fully temporary — nothing survives a toggle-off, let alone an app restart.
+- **Where is it stored?** The cursor position and the live video feed itself stay in memory only, for as long as the lens is active. The one exception: while the lens is on, that same video is also recorded to a file on the Desktop (`Magnifier Recording <timestamp>.mp4`), saved when the lens toggles off. Nothing else is written anywhere.
+- **Temporary or persistent?** The saved recording file is the one persistent thing this tool produces; everything else is fully temporary and doesn't survive a toggle-off, let alone an app restart.
 - **Does it need memory between sessions?** No.
 - **Does it require AI inference?** No — ruled out explicitly in `docs/TOOL_INTENT_STATEMENT.md`'s Refusal Clause.
 - **How many API calls are realistically required?** Zero network calls. The only capture API involved is macOS's own screen-recording API (`getDisplayMedia`), called once per toggle-on.
@@ -111,6 +114,11 @@ the lens window from any screen capture, including its own.
   the cursor from the capture itself (a known, still-open Chromium
   limitation). Covers the standard arrow; an unusually large custom
   cursor may not be fully covered.
+- If the lens reacquires its capture mid-recording (a display change or
+  a sleep/wake cycle during an active session), the recording splits
+  into a separate file at that point rather than one continuous file —
+  `MediaRecorder` doesn't survive the underlying stream being swapped or
+  stopped, confirmed by testing rather than assumed.
 
 ## Break log
 
