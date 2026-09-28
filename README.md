@@ -118,16 +118,24 @@ the lens window from any screen capture, including its own.
 - The system cursor gets blurred out inside the lens (see
   `blurCursorArea()` in `renderer/lens.js`), since there's no OS or
   Electron option to exclude the cursor from the capture itself (a
-  known, still-open Chromium limitation). An earlier version tried to
-  paste a same-size patch of nearby pixels over the cursor instead;
-  that was a real mistake, since `getDisplayMedia()` has capture
-  latency independent of anything this app controls, and a wrong guess
-  at the cursor's position didn't just fail to hide it, it pasted in a
-  second, visibly wrong patch of its own. Blurring the same source
-  pixels in place instead of replacing them fixes that failure mode by
-  construction: a wrong guess just blurs harmless nearby content. Still
-  a heuristic, not a guarantee, on a fast enough swipe. An unusually
-  large custom cursor may not be fully covered either way.
+  known, still-open Chromium limitation). This went through two real,
+  visible failures before landing: pasting a sampled patch of different
+  pixels over the cursor (instead of blurring) added a second, visibly
+  wrong artifact whenever the guess was off; and the first blur attempt
+  used a radius that came out roughly 4x too large in area (a units
+  mixup) while also centering on the cursor's hotspot rather than on
+  where the glyph itself actually sits, so the arrow's own tip still
+  poked out past the edge, still fully visible. The current version
+  blurs the same source pixels in place (not different ones, so a wrong
+  guess can only ever soften harmless content, never paste in something
+  visibly wrong) in a deliberately offset, size-checked area that was
+  confirmed -- by actually rendering it against a synthetic frame and
+  looking at it, not just computing the numbers -- to fully cover a
+  standard arrow's glyph with margin to spare. Still a heuristic, not a
+  guarantee, given `getDisplayMedia()`'s capture latency is outside
+  this app's control: reliable at normal cursor speeds, may still flash
+  briefly visible on a very fast swipe. An unusually large custom
+  cursor may not be fully covered either way.
 - Region recording only covers a single display: the selection window
   opens on whichever display the cursor is on when you start, and a
   drag can't span onto a second monitor.

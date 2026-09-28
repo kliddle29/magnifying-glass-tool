@@ -119,18 +119,32 @@ function draw() {
 // position. A wrong guess just blurs an empty patch of harmless content;
 // only a correct-or-close guess needs to soften the actual cursor. Either
 // way there's nothing foreign pasted in to look out of place.
+//
+// Two things confirmed wrong by actually rendering this and looking at
+// it, not just reasoning about it:
+//   1. destRadius = radiusPts * ZOOM (scale cancels out of the original
+//      formula), so a "26pt" radius was actually 78 destination pixels --
+//      nearly half the lens. Reduced substantially.
+//   2. The circle was centered ON the hotspot, but a real arrow cursor's
+//      glyph extends down and right FROM its hotspot, not around it --
+//      centering wasted half the radius on empty space above/left while
+//      the actual cursor tip poked out the bottom-right edge, still
+//      fully visible. Shifted the circle's center toward that extent
+//      instead of centering it on the hotspot.
 function blurCursorArea(sx, sy, cropSize, videoX, videoY, scale) {
   const destScale = LENS_SIZE / cropSize;
-  const radiusPts = 26; // generous: margin against capture-latency drift
-  const destRadius = radiusPts * scale * destScale;
-  const destX = (videoX - sx) * destScale;
-  const destY = (videoY - sy) * destScale;
+  const offsetPts = 12; // shift toward the arrow glyph's own down-right extent
+  const radiusPts = 18;
+  const offsetPx = offsetPts * ZOOM;
+  const destRadius = radiusPts * ZOOM;
+  const destX = (videoX - sx) * destScale + offsetPx;
+  const destY = (videoY - sy) * destScale + offsetPx;
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(destX, destY, destRadius, 0, Math.PI * 2);
   ctx.clip();
-  ctx.filter = 'blur(5px)';
+  ctx.filter = 'blur(14px)';
   ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
   ctx.restore();
 }
