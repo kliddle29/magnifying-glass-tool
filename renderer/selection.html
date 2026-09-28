@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    cursor: crosshair;
+    background: rgba(0, 0, 0, 0.25);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #box {
+    position: absolute;
+    border: 2px solid #64ffda;
+    background: rgba(100, 255, 218, 0.12);
+    display: none;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  #hint {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 7px 16px;
+    border-radius: 7px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="hint">Drag to select a region to record — Esc to cancel</div>
+  <div id="box"></div>
+  <script src="selection.js"></script>
+</body>
+</html>

@@ -31,13 +31,18 @@ freshly-granted Screen Recording permission after the app restarts.
 
 ## Use
 
-- **Click the 🔍 in the menu bar**, or press **⌘⇧M**, to toggle the lens
-  on/off. One toggle now does both: the lens shows a live 3x zoomed view,
-  and the same session is recorded to a video file on your Desktop from
-  activation to deactivation — no separate screen recorder to run
-  alongside it.
-- Hover anywhere on screen — the lens follows the cursor and shows a 3x
+Two independent features, each with its own toggle. Turning one on or
+off never affects the other.
+
+- **Magnifier — click the 🔍 in the menu bar, or press ⌘⇧M.** Hover
+  anywhere on screen and the lens follows the cursor with a live 3x
   zoomed view.
+- **Region recording — pick "Record a Region..." from the menu bar, or
+  press ⌘⇧R.** The screen dims and you drag out a rectangle, the same
+  way macOS's own screenshot tool works. Release to start recording just
+  that region; press ⌘⇧R again (or "Stop Recording" in the menu) to stop
+  and save it to your Desktop. Press Esc while dragging to cancel
+  without recording anything.
 
 The app has no Dock icon or window chrome — it's a menu-bar-only utility.
 
@@ -60,28 +65,30 @@ the lens window from any screen capture, including its own.
 
 | File | Role |
 |---|---|
-| `main.js` | Electron main process: creates the lens window, tracks the global cursor, owns the tray icon and toggle hotkey |
-| `preload.js` | Exposes a narrow IPC bridge (`window.magnifier`) to the renderer under context isolation |
-| `renderer/lens.js` | Captures the screen, crops/scales the region under the cursor onto the lens canvas each frame, and records the same capture with `MediaRecorder` for the duration of the session |
+| `main.js` | Electron main process: owns both toggles, the tray menu, and all three windows below |
+| `preload.js` | Exposes a narrow IPC bridge (`window.magnifier`) to every renderer under context isolation |
+| `renderer/lens.js` | The magnifier: captures the screen, crops/scales the region under the cursor onto the lens canvas each frame |
+| `renderer/selection.js` | The full-screen, non-click-through overlay used to drag out a recording region |
+| `renderer/recorder.js` | Hidden window: captures the screen, crops to the selected region, and records that with `MediaRecorder` |
 | `src/utils/math.js` | `clamp`/`lerp`/`mapRange` — shared by the main-process cursor clamping and the renderer's crop math |
 
 ## Back-end architecture
 
-- **What data does this tool need?** The cursor's screen position (polled ~60 times a second) and a live video feed of whichever display it's on.
-- **Where is it stored?** The cursor position and the live video feed itself stay in memory only, for as long as the lens is active. The one exception: while the lens is on, that same video is also recorded to a file on the Desktop (`Magnifier Recording <timestamp>.mp4`), saved when the lens toggles off. Nothing else is written anywhere.
-- **Temporary or persistent?** The saved recording file is the one persistent thing this tool produces; everything else is fully temporary and doesn't survive a toggle-off, let alone an app restart.
+- **What data does this tool need?** The cursor's screen position (polled ~60 times a second) for the magnifier, and a live video feed of whichever display is relevant for whichever feature is active.
+- **Where is it stored?** The cursor position and both features' live video feeds stay in memory only, for as long as that feature is active. The one exception: a region recording is saved to a file on the Desktop (`Magnifier Recording <timestamp>.mp4`) when you stop it. Nothing else is written anywhere.
+- **Temporary or persistent?** A saved recording is the one persistent thing this tool produces; everything else is fully temporary and doesn't survive that feature turning off, let alone an app restart.
 - **Does it need memory between sessions?** No.
 - **Does it require AI inference?** No — ruled out explicitly in `docs/TOOL_INTENT_STATEMENT.md`'s Refusal Clause.
-- **How many API calls are realistically required?** Zero network calls. The only capture API involved is macOS's own screen-recording API (`getDisplayMedia`), called once per toggle-on.
-- **What happens if it fails?** The lens switches to a visibly distinct state (red ring, plain-language reason) instead of freezing or going blank — see `renderer/lens.js`'s `showNotSensing()`. The same state covers a mid-use failure (permission revoked, display disconnected), not just startup failure.
+- **How many API calls are realistically required?** Zero network calls. The only capture API involved is macOS's own screen-recording API (`getDisplayMedia`), called once per activation of either feature.
+- **What happens if it fails?** The magnifier switches to a visibly distinct state (red ring, plain-language reason) instead of freezing or going blank — see `renderer/lens.js`'s `showNotSensing()`. If a region recording fails to start (capture denied, etc.), it logs the error and cleanly resets instead of leaving a stuck "recording" state in the tray menu.
 
 ### Layers
 
 | Layer | Where | What it does |
 |---|---|---|
-| Input | `main.js` `startTracking()` | Polls cursor position and the toggle trigger (tray click / ⌘⇧M) |
-| Logic | `main.js` + `renderer/lens.js` | Clamps window position to the display bounds; maps the cursor into the captured video's pixel space and computes the crop region |
-| Output | `renderer/lens.js` `draw()` | Repaints the cropped, scaled region onto the canvas every frame; falls back to the not-sensing state on capture failure |
+| Input | `main.js` `startTracking()`, `renderer/selection.js` | Polls cursor position for the magnifier; catches the drag that defines a recording region |
+| Logic | `main.js` + `renderer/lens.js` / `renderer/recorder.js` | Clamps the lens window to display bounds and computes its crop region; converts a dragged selection from logical points into the physical-pixel region the recorder crops to |
+| Output | `renderer/lens.js` `draw()`, `renderer/recorder.js` `drawRegion()` | Repaints the magnifier canvas every frame; repaints the recording canvas every frame and feeds it to `MediaRecorder` |
 
 ### Behavior integrity check
 
@@ -114,11 +121,14 @@ the lens window from any screen capture, including its own.
   the cursor from the capture itself (a known, still-open Chromium
   limitation). Covers the standard arrow; an unusually large custom
   cursor may not be fully covered.
-- If the lens reacquires its capture mid-recording (a display change or
-  a sleep/wake cycle during an active session), the recording splits
-  into a separate file at that point rather than one continuous file —
-  `MediaRecorder` doesn't survive the underlying stream being swapped or
-  stopped, confirmed by testing rather than assumed.
+- Region recording only covers a single display: the selection window
+  opens on whichever display the cursor is on when you start, and a
+  drag can't span onto a second monitor.
+- If a region recording is running and the display it's capturing goes
+  to sleep or gets disconnected, the recording just ends with whatever
+  was captured up to that point rather than recovering — there's no
+  reacquire-and-continue behavior here the way the magnifier has for
+  its own capture.
 
 ## Break log
 

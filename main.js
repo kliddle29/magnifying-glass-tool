@@ -7,6 +7,7 @@ const {
   app,
   BrowserWindow,
   Tray,
+  Menu,
   screen,
   desktopCapturer,
   globalShortcut,
@@ -22,7 +23,8 @@ const LENS_SIZE = 180;
 const WINDOW_WIDTH = LENS_SIZE + 40;
 const WINDOW_HEIGHT = LENS_SIZE + 16;
 const TRACK_INTERVAL_MS = 16;
-const TOGGLE_SHORTCUT = 'CommandOrControl+Shift+M';
+const ZOOM_SHORTCUT = 'CommandOrControl+Shift+M';
+const RECORD_SHORTCUT = 'CommandOrControl+Shift+R';
 // Matches the CSS fade duration in lens.css -- the window waits for the
 // fade-out to finish playing before it actually disappears, instead of
 // cutting the animation off mid-flight.
@@ -35,9 +37,13 @@ function forwardConsole(win, label) {
 }
 
 let lensWindow = null;
+let selectionWindow = null;
+let recorderWindow = null;
 let tray = null;
 let trackTimer = null;
-let active = false;
+let active = false; // zoom lens on/off
+let recording = false; // region recording on/off -- entirely independent of `active`
+let selectionDisplay = null; // the display the open selection window covers
 
 function createLensWindow() {
   lensWindow = new BrowserWindow({
@@ -78,7 +84,7 @@ function createLensWindow() {
 function setupDisplayMediaHandler() {
   // A custom handler makes getDisplayMedia() in the renderer resolve
   // silently with the display under the cursor instead of popping the OS
-  // source picker every time the lens turns on.
+  // source picker every time a capture starts.
   session.defaultSession.setDisplayMediaRequestHandler(
     (request, callback) => {
       const cursor = screen.getCursorScreenPoint();
@@ -152,28 +158,100 @@ function setActive(next) {
       if (!active) lensWindow.hide();
     }, FADE_MS);
   }
-  if (tray) tray.setTitle(active ? '•' : '');
+  updateTrayMenu();
+}
+
+// --- Region recording: fully independent of the zoom lens above. Toggling
+// one never starts or stops the other. ---
+
+function createSelectionWindow(display) {
+  selectionWindow = new BrowserWindow({
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hiddenInMissionControl: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  // Deliberately NOT setIgnoreMouseEvents -- this window exists to catch
+  // the drag that defines the recording region, unlike the click-through lens.
+  selectionWindow.setAlwaysOnTop(true, 'screen-saver');
+  selectionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  selectionWindow.setContentProtection(true);
+  selectionWindow.loadFile(path.join(__dirname, 'renderer', 'selection.html'));
+  forwardConsole(selectionWindow, 'selection');
+  selectionWindow.once('ready-to-show', () => selectionWindow.show());
+}
+
+function closeSelectionWindow() {
+  if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close();
+  selectionWindow = null;
+}
+
+function createRecorderWindow() {
+  recorderWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  recorderWindow.setContentProtection(true);
+  recorderWindow.loadFile(path.join(__dirname, 'renderer', 'recorder.html'));
+  forwardConsole(recorderWindow, 'recorder');
+}
+
+function startRecordingFlow() {
+  if (recording || selectionWindow) return;
+  const cursor = screen.getCursorScreenPoint();
+  selectionDisplay = screen.getDisplayNearestPoint(cursor);
+  createSelectionWindow(selectionDisplay);
+}
+
+function stopRecordingFlow() {
+  if (!recording || !recorderWindow || recorderWindow.isDestroyed()) return;
+  recorderWindow.webContents.send('stop-region-recording');
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  tray.setTitle(active || recording ? '•' : '');
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: active ? 'Turn Off Magnifier' : 'Turn On Magnifier',
+        click: () => setActive(!active),
+      },
+      {
+        label: recording ? 'Stop Recording' : 'Record a Region...',
+        click: () => (recording ? stopRecordingFlow() : startRecordingFlow()),
+      },
+    ])
+  );
 }
 
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip(`Magnifier — click or ${TOGGLE_SHORTCUT.replace('CommandOrControl', '⌘')} to toggle`);
-  tray.on('click', () => setActive(!active));
-}
-
-function registerPowerEvents() {
-  // A getDisplayMedia() stream doesn't reliably signal its own death across
-  // system sleep -- the video track can just freeze on its last frame
-  // instead of firing 'ended'. powerMonitor's 'resume' is the OS telling us
-  // directly the machine just woke up, which is a real signal instead of a
-  // guess about media-track event behavior across sleep.
-  powerMonitor.on('resume', () => {
-    if (lensWindow && !lensWindow.isDestroyed()) {
-      lensWindow.webContents.send('system-resumed');
-    }
-  });
+  tray.setToolTip(
+    `Magnifier — ${ZOOM_SHORTCUT.replace('CommandOrControl', '⌘')} to zoom, ` +
+      `${RECORD_SHORTCUT.replace('CommandOrControl', '⌘')} to record a region`
+  );
+  updateTrayMenu();
 }
 
 function registerRecordingHandler() {
@@ -190,12 +268,67 @@ function registerRecordingHandler() {
     fs.writeFileSync(filePath, buffer);
     return filePath;
   });
+
+  ipcMain.on('selection-confirm', (event, localRect) => {
+    // Use the display the selection window was actually created for, not a
+    // fresh cursor lookup -- the pointer has already moved by the time this
+    // arrives (it's sitting wherever the drag ended), and re-querying here
+    // could resolve to the wrong display in a multi-monitor setup.
+    const scale = (selectionDisplay && selectionDisplay.scaleFactor) || 1;
+    closeSelectionWindow();
+
+    createRecorderWindow();
+    recording = true;
+    updateTrayMenu();
+    recorderWindow.webContents.once('did-finish-load', () => {
+      recorderWindow.webContents.send('start-region-recording', {
+        x: Math.round(localRect.x * scale),
+        y: Math.round(localRect.y * scale),
+        width: Math.round(localRect.width * scale),
+        height: Math.round(localRect.height * scale),
+      });
+    });
+  });
+
+  ipcMain.on('selection-cancel', () => {
+    closeSelectionWindow();
+  });
+
+  ipcMain.on('region-recording-stopped', () => {
+    recording = false;
+    updateTrayMenu();
+    if (recorderWindow && !recorderWindow.isDestroyed()) recorderWindow.close();
+    recorderWindow = null;
+  });
+}
+
+function registerPowerEvents() {
+  // A getDisplayMedia() stream doesn't reliably signal its own death across
+  // system sleep -- the video track can just freeze on its last frame
+  // instead of firing 'ended'. powerMonitor's 'resume' is the OS telling us
+  // directly the machine just woke up, which is a real signal instead of a
+  // guess about media-track event behavior across sleep.
+  powerMonitor.on('resume', () => {
+    if (lensWindow && !lensWindow.isDestroyed()) {
+      lensWindow.webContents.send('system-resumed');
+    }
+  });
 }
 
 function registerShortcuts() {
-  const toggleOk = globalShortcut.register(TOGGLE_SHORTCUT, () => setActive(!active));
-  if (!toggleOk) {
-    console.warn(`Could not register ${TOGGLE_SHORTCUT} — another app is probably using it.`);
+  const zoomOk = globalShortcut.register(ZOOM_SHORTCUT, () => setActive(!active));
+  if (!zoomOk) {
+    console.warn(`Could not register ${ZOOM_SHORTCUT} — another app is probably using it.`);
+  }
+  const recordOk = globalShortcut.register(RECORD_SHORTCUT, () => {
+    if (recording) {
+      stopRecordingFlow();
+    } else {
+      startRecordingFlow();
+    }
+  });
+  if (!recordOk) {
+    console.warn(`Could not register ${RECORD_SHORTCUT} — another app is probably using it.`);
   }
 }
 
