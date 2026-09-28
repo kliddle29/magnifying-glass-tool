@@ -96,6 +96,36 @@ function draw() {
 
   ctx.clearRect(0, 0, LENS_SIZE, LENS_SIZE);
   ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
+  eraseCursorArtifact(sx, sy, cropSize, videoX, videoY, scale);
+}
+
+// Chromium's screen capture always burns the real system cursor into the
+// captured frame, and there's no constraint or Electron API that turns it
+// off (a known, still-open limitation -- crbug.com/1007177, unfixed since
+// 2019). Since the crop is always centered on the cursor's own hotspot,
+// its position in the frame is known exactly, so this papers over the
+// glyph by stamping in a same-size patch sampled from just beside it
+// instead. Not pixel-perfect for unusually large custom cursors, but
+// covers the standard arrow.
+function eraseCursorArtifact(sx, sy, cropSize, videoX, videoY, scale) {
+  const destScale = LENS_SIZE / cropSize;
+  const patchPts = 20; // covers the standard macOS arrow's glyph extent
+  const patchPx = patchPts * scale;
+
+  let srcX = videoX - patchPx;
+  if (srcX < 0 || srcX + patchPx > video.videoWidth) srcX = videoX + patchPx;
+  if (srcX < 0 || srcX + patchPx > video.videoWidth) return; // no room either side
+
+  const srcY = clamp(videoY, 0, video.videoHeight - patchPx);
+  // destY is derived from the cursor's real position, not the (possibly
+  // clamped) sample position -- otherwise the patch can land somewhere
+  // other than where the cursor actually is once clamping kicks in near
+  // a vertical screen edge.
+  const destX = (videoX - sx) * destScale;
+  const destY = (videoY - sy) * destScale;
+  const destSize = patchPx * destScale;
+
+  ctx.drawImage(video, srcX, srcY, patchPx, patchPx, destX, destY, destSize, destSize);
 }
 
 window.magnifier.onCursorUpdate((data) => {

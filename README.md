@@ -105,6 +105,12 @@ the lens window from any screen capture, including its own.
   inside this app: Accessibility Zoom magnifies the whole composited
   screen, including this app's own lens window, and there's no API for
   a regular app to exclude itself from it.
+- The system cursor gets papered over inside the lens with a same-size
+  patch sampled from just beside it (see `eraseCursorArtifact()` in
+  `renderer/lens.js`), since there's no OS or Electron option to exclude
+  the cursor from the capture itself (a known, still-open Chromium
+  limitation). Covers the standard arrow; an unusually large custom
+  cursor may not be fully covered.
 
 ## Break log
 
