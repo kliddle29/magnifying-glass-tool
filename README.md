@@ -115,27 +115,17 @@ the lens window from any screen capture, including its own.
   inside this app: Accessibility Zoom magnifies the whole composited
   screen, including this app's own lens window, and there's no API for
   a regular app to exclude itself from it.
-- The system cursor gets blurred out inside the lens (see
-  `blurCursorArea()` in `renderer/lens.js`), since there's no OS or
-  Electron option to exclude the cursor from the capture itself (a
-  known, still-open Chromium limitation). This went through two real,
-  visible failures before landing: pasting a sampled patch of different
-  pixels over the cursor (instead of blurring) added a second, visibly
-  wrong artifact whenever the guess was off; and the first blur attempt
-  used a radius that came out roughly 4x too large in area (a units
-  mixup) while also centering on the cursor's hotspot rather than on
-  where the glyph itself actually sits, so the arrow's own tip still
-  poked out past the edge, still fully visible. The current version
-  blurs the same source pixels in place (not different ones, so a wrong
-  guess can only ever soften harmless content, never paste in something
-  visibly wrong) in a deliberately offset, size-checked area that was
-  confirmed -- by actually rendering it against a synthetic frame and
-  looking at it, not just computing the numbers -- to fully cover a
-  standard arrow's glyph with margin to spare. Still a heuristic, not a
-  guarantee, given `getDisplayMedia()`'s capture latency is outside
-  this app's control: reliable at normal cursor speeds, may still flash
-  briefly visible on a very fast swipe. An unusually large custom
-  cursor may not be fully covered either way.
+- The system cursor shows up normally inside the lens, since the
+  capture includes it and there's no OS or Electron option to exclude
+  it (a known, still-open Chromium limitation). A patch-based erasure
+  attempt, and then a blur, were both tried and abandoned: two rounds
+  of patch bugs (a directional bias, then a second visible artifact
+  from pasting mismatched pixels over a wrong guess) led to a blur
+  instead, which fixed the visible-artifact problem but was worse
+  overall -- obscuring part of the exact region being magnified
+  defeats the point of a magnifier. The cursor is left untouched now.
+  Full history in `process/break-log.md` and (for the Final Tool
+  Revision submission) `process/revision/revision-log.md`.
 - Region recording only covers a single display: the selection window
   opens on whichever display the cursor is on when you start, and a
   drag can't span onto a second monitor.

@@ -96,57 +96,6 @@ function draw() {
 
   ctx.clearRect(0, 0, LENS_SIZE, LENS_SIZE);
   ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
-  blurCursorArea(sx, sy, cropSize, videoX, videoY, scale);
-}
-
-// Chromium's screen capture always burns the real system cursor into the
-// captured frame, and there's no constraint or Electron API that turns it
-// off (a known, still-open limitation -- crbug.com/1007177, unfixed since
-// 2019).
-//
-// This used to paste a patch of pixels sampled from elsewhere in the
-// frame over the cursor's guessed position. That was a real mistake:
-// getDisplayMedia's capture latency means the guessed position is only
-// ever approximate while the cursor is moving, and pasting in *different*
-// content at a wrong guess doesn't just fail to hide the real cursor --
-// it adds a second, visibly wrong patch of its own, which is worse than
-// the original problem (confirmed after shipping it: two glitching
-// fragments instead of one visible cursor).
-//
-// Blurring instead of replacing fixes that failure mode by construction.
-// This redraws the exact same source pixels, not different ones, through
-// a blur filter, clipped to a generous area around the guessed cursor
-// position. A wrong guess just blurs an empty patch of harmless content;
-// only a correct-or-close guess needs to soften the actual cursor. Either
-// way there's nothing foreign pasted in to look out of place.
-//
-// Two things confirmed wrong by actually rendering this and looking at
-// it, not just reasoning about it:
-//   1. destRadius = radiusPts * ZOOM (scale cancels out of the original
-//      formula), so a "26pt" radius was actually 78 destination pixels --
-//      nearly half the lens. Reduced substantially.
-//   2. The circle was centered ON the hotspot, but a real arrow cursor's
-//      glyph extends down and right FROM its hotspot, not around it --
-//      centering wasted half the radius on empty space above/left while
-//      the actual cursor tip poked out the bottom-right edge, still
-//      fully visible. Shifted the circle's center toward that extent
-//      instead of centering it on the hotspot.
-function blurCursorArea(sx, sy, cropSize, videoX, videoY, scale) {
-  const destScale = LENS_SIZE / cropSize;
-  const offsetPts = 12; // shift toward the arrow glyph's own down-right extent
-  const radiusPts = 18;
-  const offsetPx = offsetPts * ZOOM;
-  const destRadius = radiusPts * ZOOM;
-  const destX = (videoX - sx) * destScale + offsetPx;
-  const destY = (videoY - sy) * destScale + offsetPx;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(destX, destY, destRadius, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.filter = 'blur(14px)';
-  ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, LENS_SIZE, LENS_SIZE);
-  ctx.restore();
 }
 
 window.magnifier.onCursorUpdate((data) => {
